@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<title>Overlay คิวเพลง</title>
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@500;600&display=swap" rel="stylesheet">
+<style>
+  /* พื้นเขียว สำหรับใช้ Chroma Key ใน OBS / TikTok LIVE Studio — กดปุ่ม B เพื่อสลับสีพื้น */
+  html, body { margin: 0; background: #00ff00; font-family: 'Prompt', sans-serif; color: #fff; }
+  body.dark { background: #111; }
+  body.clear { background: transparent; }
+  .box { width: 460px; padding: 16px; }
+  .now { background: linear-gradient(120deg, #fe2c55, #8c1e5a); border-radius: 14px; padding: 12px 16px; }
+  .label { font-size: 13px; opacity: .85; }
+  .song { font-size: 24px; font-weight: 600; line-height: 1.3; }
+  .by { font-size: 14px; opacity: .9; }
+  .list { margin-top: 10px; background: #15151c; border-radius: 14px; padding: 10px 16px; }
+  .row { display: flex; gap: 10px; padding: 5px 0; font-size: 17px; border-bottom: 1px solid #2a2a33; }
+  .row:last-child { border: 0; }
+  .n { color: #25f4ee; font-weight: 600; width: 20px; }
+  .who { margin-left: auto; opacity: .6; font-size: 14px; white-space: nowrap; }
+  .t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .more { font-size: 13px; opacity: .7; text-align: center; padding-top: 4px; }
+  .hint { font-size: 14px; opacity: .8; padding: 6px 0; }
+  .wait { color: #111; font-size: 14px; padding: 8px 16px; }
+</style>
+</head>
+<body>
+<div class="box">
+  <div class="now"><div class="label">🔊 กำลังเล่น</div><div class="song" id="song">—</div><div class="by" id="by"></div></div>
+  <div class="list" id="list"></div>
+</div>
+<div class="wait" id="wait">รอข้อมูลจากหน้าจัดคิว… (ต้องเปิดหน้าจัดคิวค้างไว้)</div>
+<script>
+const SHOW = 5;
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function draw(s) {
+  document.getElementById('wait').style.display = 'none';
+  const kw = (s.keywords && s.keywords[0]) || 'ขอเพลง';
+  document.getElementById('song').textContent = s.nowPlaying ? s.nowPlaying.song : 'รอเพลงแรก…';
+  document.getElementById('by').textContent = s.nowPlaying ? 'ขอโดย ' + s.nowPlaying.nickname : '';
+  const q = (s.queue || []).filter(x => x.status === 'queued');
+  document.getElementById('list').innerHTML = q.length
+    ? q.slice(0, SHOW).map((x, i) => `<div class="row"><span class="n">${i + 1}</span><span class="t">${esc(x.song)}</span><span class="who">${esc(x.nickname)}</span></div>`).join('')
+      + (q.length > SHOW ? `<div class="more">+ อีก ${q.length - SHOW} เพลง</div>` : '')
+    : `<div class="hint">พิมพ์ "${esc(kw)} ชื่อเพลง" ในแชทเพื่อขอเพลง 🎶</div>`;
+}
+// อ่านข้อมูลที่บันทึกไว้ก่อน แล้วรอรับอัปเดตสดจากหน้าจัดคิว
+try { const s = JSON.parse(localStorage.getItem('songqueue-v1')); if (s) draw({ ...s, keywords: s.settings && s.settings.keywords }); } catch {}
+if ('BroadcastChannel' in window) {
+  const ch = new BroadcastChannel('songqueue');
+  ch.onmessage = (e) => { if (e.data && typeof e.data === 'object') draw(e.data); };
+  ch.postMessage('hello');
+}
+const modes = ['', 'dark', 'clear'];
+let m = 0;
+document.addEventListener('keydown', (e) => { if (e.key.toLowerCase() === 'b') document.body.className = modes[m = (m + 1) % 3]; });
+</script>
+</body>
+</html>

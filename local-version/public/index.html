@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="th">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>จัดคิวเพลง Live</title>
+<link href="https://fonts.googleapis.com/css2?family=Prompt:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #0f0f14; --panel: #1a1a22; --panel2: #23232e; --line: #2e2e3b;
+    --text: #f2f2f5; --muted: #9a9aab; --pink: #fe2c55; --cyan: #25f4ee;
+    --ok: #3ddc84; --warn: #ffb020;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--text); font-family: 'Prompt', system-ui, sans-serif; font-size: 15px; }
+  button, input { font: inherit; color: inherit; }
+  button { cursor: pointer; border: 1px solid var(--line); background: var(--panel2); border-radius: 8px; padding: 6px 12px; }
+  button:hover { border-color: var(--muted); }
+  button.primary { background: var(--pink); border-color: var(--pink); color: #fff; font-weight: 600; }
+  button.ghost { background: transparent; }
+  input[type=text], input[type=number] { background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; width: 100%; }
+  input:focus { outline: 2px solid var(--cyan); outline-offset: -1px; }
+
+  header { display: flex; align-items: center; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--line); flex-wrap: wrap; }
+  header h1 { font-size: 18px; margin: 0 auto 0 0; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; background: #555; display: inline-block; }
+  .dot.online { background: var(--ok); box-shadow: 0 0 8px var(--ok); }
+  .dot.connecting { background: var(--warn); }
+  .conn { display: flex; gap: 8px; align-items: center; }
+  .conn input { width: 180px; }
+
+  main { display: grid; grid-template-columns: 1fr 340px; gap: 16px; padding: 16px 20px; max-width: 1300px; margin: auto; }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  section { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; }
+  h2 { font-size: 14px; color: var(--muted); font-weight: 500; margin: 0 0 10px; display: flex; align-items: center; gap: 8px; }
+  h2 .count { background: var(--panel2); border-radius: 99px; padding: 0 8px; color: var(--text); }
+  h2 .right { margin-left: auto; }
+
+  .now { background: linear-gradient(120deg, rgba(254,44,85,.25), rgba(37,244,238,.15)); border-color: rgba(254,44,85,.5); }
+  .now .song { font-size: 26px; font-weight: 600; margin: 4px 0; word-break: break-word; }
+  .now .by { color: var(--muted); }
+  .now .btns { display: flex; gap: 8px; margin-top: 12px; }
+  .now .btns .primary { font-size: 16px; padding: 10px 20px; }
+
+  .add { display: flex; gap: 8px; margin: 14px 0; }
+  ol { list-style: none; padding: 0; margin: 0; }
+  li.item { display: grid; grid-template-columns: 32px 1fr auto; gap: 10px; align-items: center; padding: 10px; border-radius: 8px; border: 1px solid transparent; }
+  li.item:nth-child(odd) { background: var(--panel2); }
+  li.item.pending { border-color: var(--warn); }
+  .num { color: var(--muted); text-align: center; font-weight: 600; }
+  .song-name { font-weight: 500; word-break: break-word; }
+  .meta { color: var(--muted); font-size: 13px; }
+  .acts { display: flex; gap: 4px; }
+  .acts button { padding: 4px 8px; font-size: 13px; }
+  .empty { color: var(--muted); text-align: center; padding: 24px; }
+  .tag { font-size: 12px; color: var(--warn); }
+
+  aside { display: flex; flex-direction: column; gap: 16px; }
+  label.row { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin: 8px 0; }
+  .chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+  .chip { background: var(--panel2); border: 1px solid var(--line); border-radius: 99px; padding: 2px 6px 2px 10px; font-size: 13px; display: flex; align-items: center; gap: 4px; }
+  .chip button { border: 0; background: none; padding: 0 4px; color: var(--muted); }
+  .log { max-height: 220px; overflow: auto; font-size: 13px; }
+  .log div { padding: 3px 0; border-bottom: 1px dashed var(--line); }
+  .log .warn { color: var(--warn); }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 6px; }
+  details summary { cursor: pointer; color: var(--muted); }
+  .toast { position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%); background: var(--panel2); border: 1px solid var(--line); padding: 10px 16px; border-radius: 8px; opacity: 0; transition: .2s; pointer-events: none; }
+  .toast.show { opacity: 1; }
+</style>
+</head>
+<body>
+<header>
+  <h1>🎵 จัดคิวเพลง Live</h1>
+  <span class="dot" id="dot"></span><span id="liveMsg" class="meta">ยังไม่ได้เชื่อมต่อ</span>
+  <div class="conn">
+    <input type="text" id="username" placeholder="@ชื่อผู้ใช้ TikTok">
+    <button class="primary" id="connectBtn">เชื่อมต่อ</button>
+  </div>
+</header>
+
+<main>
+  <div>
+    <section class="now">
+      <h2>🔊 กำลังเล่น</h2>
+      <div id="now"></div>
+      <div class="btns">
+        <button class="primary" id="nextBtn">▶ เพลงถัดไป</button>
+        <button id="finishBtn">✓ จบเพลงนี้</button>
+      </div>
+    </section>
+
+    <form class="add" id="addForm">
+      <input type="text" id="addSong" placeholder="เพิ่มเพลงเอง (เช่น ขอจากของขวัญ / ขอใน DM)">
+      <button class="primary">+ เพิ่ม</button>
+    </form>
+
+    <section>
+      <h2>📋 คิวเพลง <span class="count" id="qCount">0</span>
+        <button class="ghost right" id="clearBtn">ล้างคิว</button></h2>
+      <ol id="queue"></ol>
+    </section>
+
+    <section style="margin-top:16px">
+      <details>
+        <summary>🕘 เพลงที่เล่นไปแล้ว (<span id="hCount">0</span>)</summary>
+        <ol id="history" style="margin-top:10px"></ol>
+      </details>
+    </section>
+  </div>
+
+  <aside>
+    <section>
+      <h2>⚙️ ตั้งค่า</h2>
+      <div class="meta">คำที่ใช้ขอเพลง</div>
+      <div class="chips" id="chips"></div>
+      <form id="kwForm" style="display:flex;gap:6px"><input type="text" id="kwInput" placeholder="เพิ่มคำ เช่น !เพลง"><button>เพิ่ม</button></form>
+      <div class="hint">คนดูพิมพ์ เช่น <b>ขอเพลง ลมหนาว</b> → เข้าคิวเป็น "ลมหนาว"</div>
+      <label class="row">ขอได้กี่เพลงต่อคน (0 = ไม่จำกัด) <input type="number" id="maxPerUser" min="0" style="width:70px"></label>
+      <label class="row">ห้ามขอเพลงซ้ำในคิว <input type="checkbox" id="blockDuplicate"></label>
+      <label class="row">เข้าคิวทันที (ปิด = ต้องกดอนุมัติ) <input type="checkbox" id="autoAccept"></label>
+    </section>
+
+    <section>
+      <h2>🧪 ทดสอบ (ไม่ต้องไลฟ์)</h2>
+      <form id="testForm" style="display:flex;flex-direction:column;gap:6px">
+        <input type="text" id="testUser" placeholder="ชื่อคนดู" value="แฟนคลับ1">
+        <input type="text" id="testMsg" placeholder="ข้อความแชท" value="ขอเพลง ลมหนาว">
+        <button>ส่งข้อความทดสอบ</button>
+      </form>
+    </section>
+
+    <section>
+      <h2>📺 Overlay สำหรับไลฟ์</h2>
+      <div class="meta">ใส่ลิงก์นี้เป็น Browser Source ใน OBS / TikTok LIVE Studio</div>
+      <input type="text" readonly id="overlayUrl" style="margin-top:6px">
+      <button style="margin-top:6px" id="copyOverlay">คัดลอกลิงก์</button>
+    </section>
+
+    <section>
+      <h2>💬 กิจกรรมล่าสุด</h2>
+      <div class="log" id="log"></div>
+    </section>
+  </aside>
+</main>
+<div class="toast" id="toast"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let S = null;
+const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const ago = (t) => { const m = Math.floor((Date.now() - t) / 60000); return m < 1 ? 'เมื่อกี้' : m < 60 ? `${m} นาทีที่แล้ว` : `${Math.floor(m/60)} ชม.ที่แล้ว`; };
+
+function toast(msg) { const t = $('toast'); t.textContent = msg; t.classList.add('show'); clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove('show'), 2200); }
+
+async function api(name, body = {}) {
+  const r = await fetch('/api/' + name, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const j = await r.json().catch(() => ({}));
+  if (j && j.ok === false && j.reason) toast(j.reason);
+  return j;
+}
+
+function render() {
+  const s = S;
+  $('dot').className = 'dot ' + s.live.status;
+  $('liveMsg').textContent = s.live.message;
+  $('connectBtn').textContent = s.live.status === 'offline' ? 'เชื่อมต่อ' : 'ยกเลิก';
+  if (document.activeElement !== $('username') && !$('username').value) $('username').value = s.settings.username ? '@' + s.settings.username : '';
+
+  $('now').innerHTML = s.nowPlaying
+    ? `<div class="song">${esc(s.nowPlaying.song)}</div><div class="by">ขอโดย ${esc(s.nowPlaying.nickname)}</div>`
+    : `<div class="song" style="color:var(--muted)">— ยังไม่มีเพลง —</div><div class="by">กด "เพลงถัดไป" เพื่อเริ่มคิว</div>`;
+
+  $('qCount').textContent = s.queue.length;
+  $('queue').innerHTML = s.queue.length ? s.queue.map((q, i) => `
+    <li class="item ${q.status}">
+      <div class="num">${i + 1}</div>
+      <div><div class="song-name">${esc(q.song)} ${q.status === 'pending' ? '<span class="tag">รออนุมัติ</span>' : ''}</div>
+        <div class="meta">${esc(q.nickname)} · ${ago(q.time)}</div></div>
+      <div class="acts">
+        ${q.status === 'pending' ? `<button data-a="approve" data-id="${q.id}" title="อนุมัติ">✔</button>` : ''}
+        <button data-a="play" data-id="${q.id}" title="เล่นเลย">▶</button>
+        <button data-a="top" data-id="${q.id}" title="ขึ้นบนสุด">⤒</button>
+        <button data-a="up" data-id="${q.id}" title="ขึ้น">↑</button>
+        <button data-a="down" data-id="${q.id}" title="ลง">↓</button>
+        <button data-a="edit" data-id="${q.id}" title="แก้ชื่อเพลง">✎</button>
+        <button data-a="remove" data-id="${q.id}" title="ลบ">✕</button>
+      </div>
+    </li>`).join('') : '<div class="empty">ยังไม่มีคนขอเพลง</div>';
+
+  $('hCount').textContent = s.history.length;
+  $('history').innerHTML = s.history.slice(0, 50).map(h => `
+    <li class="item"><div class="num">✓</div>
+      <div><div class="song-name">${esc(h.song)}</div><div class="meta">${esc(h.nickname)}</div></div>
+      <div class="acts"><button data-a="requeue" data-id="${h.id}" title="ใส่คิวอีกครั้ง">↺</button></div></li>`).join('');
+
+  $('chips').innerHTML = s.settings.keywords.map((k, i) => `<span class="chip">${esc(k)}<button data-kw="${i}" title="ลบ">×</button></span>`).join('');
+  if (document.activeElement !== $('maxPerUser')) $('maxPerUser').value = s.settings.maxPerUser;
+  $('blockDuplicate').checked = s.settings.blockDuplicate;
+  $('autoAccept').checked = s.settings.autoAccept;
+
+  $('log').innerHTML = s.log.map(l => `<div class="${l.type}">${esc(l.text)}</div>`).join('') || '<div class="meta">—</div>';
+}
+
+new EventSource('/events').onmessage = (e) => { S = JSON.parse(e.data); render(); };
+
+$('connectBtn').onclick = () => S.live.status === 'offline' ? api('connect', { username: $('username').value }) : api('disconnect');
+$('username').onkeydown = (e) => { if (e.key === 'Enter') $('connectBtn').click(); };
+$('nextBtn').onclick = () => api('next');
+$('finishBtn').onclick = () => api('finishCurrent');
+$('clearBtn').onclick = () => confirm('ล้างคิวทั้งหมด?') && api('clearQueue');
+$('addForm').onsubmit = (e) => { e.preventDefault(); const v = $('addSong').value.trim(); if (v) api('add', { song: v }); $('addSong').value = ''; };
+$('testForm').onsubmit = async (e) => { e.preventDefault(); const r = await api('testChat', { user: $('testUser').value, comment: $('testMsg').value }); if (r.ok) toast('เข้าคิวแล้ว'); };
+
+document.addEventListener('click', (e) => {
+  const b = e.target.closest('button[data-a]');
+  if (b) {
+    const { a, id } = b.dataset;
+    if (['top', 'up', 'down'].includes(a)) return api('move', { id, dir: a });
+    if (a === 'edit') { const q = S.queue.find(x => x.id === id); const v = prompt('แก้ชื่อเพลง', q.song); if (v) api('edit', { id, song: v }); return; }
+    return api(a, { id });
+  }
+  const k = e.target.closest('button[data-kw]');
+  if (k) { const kws = S.settings.keywords.filter((_, i) => i != k.dataset.kw); api('settings', { keywords: kws }); }
+});
+$('kwForm').onsubmit = (e) => { e.preventDefault(); const v = $('kwInput').value.trim(); if (v) api('settings', { keywords: [...S.settings.keywords, v] }); $('kwInput').value = ''; };
+$('maxPerUser').onchange = () => api('settings', { maxPerUser: $('maxPerUser').value });
+$('blockDuplicate').onchange = () => api('settings', { blockDuplicate: $('blockDuplicate').checked });
+$('autoAccept').onchange = () => api('settings', { autoAccept: $('autoAccept').checked });
+
+$('overlayUrl').value = location.origin + '/overlay';
+$('copyOverlay').onclick = () => { navigator.clipboard.writeText($('overlayUrl').value); toast('คัดลอกแล้ว'); };
+setInterval(() => S && render(), 30000);
+</script>
+</body>
+</html>
