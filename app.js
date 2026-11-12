@@ -15,7 +15,7 @@ const store = {
 
 // ---------- ข้อมูล ----------
 let S = {
-  settings: { username: '', keywords: ['ขอเพลง', '!song', '!ขอ'], maxPerUser: 2, blockDuplicate: true, autoAccept: true, admins: [], modsAreAdmins: true, oriWord: '', karaWord: 'คาราโอเกะ karaoke', autoOpen: '', listenMode: 'direct' },
+  settings: { username: '', keywords: ['ขอเพลง', '!song', '!ขอ'], maxPerUser: 2, blockDuplicate: true, autoAccept: true, admins: [], modsAreAdmins: true, oriWord: '', karaWord: 'คาราโอเกะ karaoke', autoOpen: '' },
   nowPlaying: null, queue: [], history: [], log: [],
 };
 try {
@@ -218,8 +218,6 @@ function songQuery(song, mode) {
   const extra = mode === 'kara' ? S.settings.karaWord : S.settings.oriWord;
   return `${song} ${extra || ''}`.trim();
 }
-// ลิงก์ที่เปิดคลิปแรกได้ทันที (ไม่ต้องใช้ API Key) — ใช้ระบบ "I'm feeling lucky" ของ DuckDuckGo
-const directLink = (q) => 'https://duckduckgo.com/?q=' + encodeURIComponent('\\' + q + ' site:youtube.com/watch');
 const searchLink = (q) => 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q);
 
 // ถ้ามี YouTube API Key จะหา ID คลิปจริง → ได้ลิงก์ youtube.com/watch?v=... ตรงๆ
@@ -242,8 +240,8 @@ async function findVideo(q) {
 
 async function linkFor(song, mode) {
   const q = songQuery(song, mode);
-  if (S.settings.listenMode === 'search') return searchLink(q);
-  return (await findVideo(q)) || directLink(q);
+  // มี YouTube API Key → ลิงก์คลิปตรง / ไม่มี → หน้าค้นหาของ YouTube
+  return (await findVideo(q)) || searchLink(q);
 }
 
 function listen(song, mode) {
@@ -308,8 +306,7 @@ function render() {
   if (document.activeElement !== $('oriWord')) $('oriWord').value = S.settings.oriWord;
   if (document.activeElement !== $('karaWord')) $('karaWord').value = S.settings.karaWord;
   $('autoOpen').value = S.settings.autoOpen;
-  $('listenMode').value = S.settings.listenMode;
-  $('ytStatus').textContent = store.get(YT_KEY) ? '✅ ใส่ YouTube API Key แล้ว (ลิงก์ตรงจาก YouTube)' : 'ไม่ใส่ก็ได้ — ใส่แล้วจะได้ลิงก์ youtube.com ตรงๆ แม่นกว่า';
+  $('ytStatus').textContent = store.get(YT_KEY) ? '✅ ใส่ YouTube API Key แล้ว (ลิงก์ตรงจาก YouTube)' : 'ไม่ใส่ = เปิดหน้าค้นหาของ YouTube · ใส่แล้ว = เปิดคลิปแรกให้เลย';
   $('adminChips').innerHTML = S.settings.admins.map((a, i) => `<span class="chip">@${esc(a)}<button data-admin="${i}" title="ลบ">×</button></span>`).join('') || '<span class="meta">ยังไม่มี</span>';
   $('log').innerHTML = S.log.map(l => `<div class="${l.type}">${esc(l.text)}</div>`).join('') || '<div class="meta">—</div>';
 }
@@ -364,7 +361,6 @@ $('adminForm').onsubmit = (e) => {
 };
 $('oriWord').onchange = () => { S.settings.oriWord = $('oriWord').value.trim(); commit(); };
 $('karaWord').onchange = () => { S.settings.karaWord = $('karaWord').value.trim(); commit(); };
-$('listenMode').onchange = () => { S.settings.listenMode = $('listenMode').value; commit(); };
 $('saveYt').onclick = () => {
   const k = $('ytKey').value.trim();
   if (k) store.set(YT_KEY, k); else { try { localStorage.removeItem(YT_KEY); } catch {} }
