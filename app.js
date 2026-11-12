@@ -15,7 +15,7 @@ const store = {
 
 // ---------- ข้อมูล ----------
 let S = {
-  settings: { username: '', keywords: ['ขอเพลง', '!song', '!ขอ'], maxPerUser: 2, blockDuplicate: true, autoAccept: true, admins: [], modsAreAdmins: true, oriWord: '', karaWord: 'คาราโอเกะ karaoke', autoOpen: '' },
+  settings: { username: '', keywords: ['ขอเพลง', '!song', '!ขอ'], maxPerUser: 2, blockDuplicate: true, autoAccept: true, admins: [], modsAreAdmins: true, oriWord: '', karaWord: 'คาราโอเกะ karaoke', autoOpen: '', listenMode: 'direct' },
   nowPlaying: null, queue: [], history: [], log: [],
 };
 try {
@@ -210,18 +210,59 @@ const actions = {
   requeue(id) { const h = S.history.find(x => x.id === id); if (h) addRequest(h.song, h.user, h.nickname, 'manual'); },
 };
 
-// ---------- ปุ่มฟังเพลง (เปิด YouTube) ----------
+// ---------- ปุ่มฟังเพลง (เปิดคลิป YouTube) ----------
+const YT_KEY = 'songqueue-ytkey';
+const ytCache = (() => { try { return JSON.parse(store.get('songqueue-ytcache') || '{}'); } catch { return {}; } })();
+
+function songQuery(song, mode) {
+  const extra = mode === 'kara' ? S.settings.karaWord : S.settings.oriWord;
+  return `${song} ${extra || ''}`.trim();
+}
+// ลิงก์ที่เปิดคลิปแรกได้ทันที (ไม่ต้องใช้ API Key) — ใช้ระบบ "I'm feeling lucky" ของ DuckDuckGo
+const directLink = (q) => 'https://duckduckgo.com/?q=' + encodeURIComponent('\\' + q + ' site:youtube.com/watch');
+const searchLink = (q) => 'https://www.youtube.com/results?search_query=' + encodeURIComponent(q);
+
+// ถ้ามี YouTube API Key จะหา ID คลิปจริง → ได้ลิงก์ youtube.com/watch?v=... ตรงๆ
+async function findVideo(q) {
+  const key = store.get(YT_KEY);
+  if (!key) return null;
+  if (ytCache[q]) return ytCache[q];
+  try {
+    const r = await fetch('https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=1&videoEmbeddable=any&q='
+      + encodeURIComponent(q) + '&key=' + encodeURIComponent(key));
+    const j = await r.json();
+    if (j.error) { addLog('⚠️ YouTube API: ' + (j.error.message || 'ใช้ไม่ได้'), 'warn'); render(); return null; }
+    const id = j.items && j.items[0] && j.items[0].id.videoId;
+    if (!id) return null;
+    ytCache[q] = 'https://www.youtube.com/watch?v=' + id;
+    store.set('songqueue-ytcache', JSON.stringify(ytCache));
+    return ytCache[q];
+  } catch { return null; }
+}
+
+async function linkFor(song, mode) {
+  const q = songQuery(song, mode);
+  if (S.settings.listenMode === 'search') return searchLink(q);
+  return (await findVideo(q)) || directLink(q);
+}
+
 function listen(song, mode) {
   if (!song) return;
-  const extra = mode === 'kara' ? S.settings.karaWord : S.settings.oriWord;
-  const q = `${song} ${extra || ''}`.trim();
-  // ใช้หน้าต่างเดิมซ้ำ ไม่เปิดแท็บใหม่ทุกครั้ง
-  const w = window.open('https://www.youtube.com/results?search_query=' + encodeURIComponent(q), 'songqueue-player');
-  if (!w) toast('เบราว์เซอร์บล็อกป๊อปอัป — กดอนุญาตป๊อปอัปให้เว็บนี้');
+  // เปิดหน้าต่างก่อนทันที (กันเบราว์เซอร์บล็อกป๊อปอัป) แล้วค่อยใส่ลิงก์
+  const w = window.open('', 'songqueue-player');
+  if (!w) return toast('เบราว์เซอร์บล็อกป๊อปอัป — กดอนุญาตป๊อปอัปให้เว็บนี้');
+  linkFor(song, mode).then(url => { try { w.location.href = url; w.focus(); } catch { window.open(url, 'songqueue-player'); } });
 }
+
+async function copyLink(song, mode) {
+  const url = await linkFor(song, mode);
+  try { await navigator.clipboard.writeText(url); toast('คัดลอกลิงก์แล้ว'); }
+  catch { prompt('คัดลอกลิงก์นี้', url); }
+}
+
 const listenBtns = (id) => `
-  <button class="listen" data-listen="ori" data-id="${id}" title="ฟังต้นฉบับ">▶ ต้นฉบับ</button>
-  <button class="listen kara" data-listen="kara" data-id="${id}" title="เปิดคาราโอเกะ">🎤 คาราโอเกะ</button>`;
+  <button class="listen" data-listen="ori" data-id="${id}" title="เปิดเพลงต้นฉบับ (คลิกขวา = คัดลอกลิงก์)">▶ ต้นฉบับ</button>
+  <button class="listen kara" data-listen="kara" data-id="${id}" title="เปิดคาราโอเกะ (คลิกขวา = คัดลอกลิงก์)">🎤 คาราโอเกะ</button>`;
 const findSong = (id) => (S.nowPlaying && S.nowPlaying.id === id ? S.nowPlaying : null)
   || S.queue.find(x => x.id === id) || S.history.find(x => x.id === id);
 
@@ -267,6 +308,8 @@ function render() {
   if (document.activeElement !== $('oriWord')) $('oriWord').value = S.settings.oriWord;
   if (document.activeElement !== $('karaWord')) $('karaWord').value = S.settings.karaWord;
   $('autoOpen').value = S.settings.autoOpen;
+  $('listenMode').value = S.settings.listenMode;
+  $('ytStatus').textContent = store.get(YT_KEY) ? '✅ ใส่ YouTube API Key แล้ว (ลิงก์ตรงจาก YouTube)' : 'ไม่ใส่ก็ได้ — ใส่แล้วจะได้ลิงก์ youtube.com ตรงๆ แม่นกว่า';
   $('adminChips').innerHTML = S.settings.admins.map((a, i) => `<span class="chip">@${esc(a)}<button data-admin="${i}" title="ลบ">×</button></span>`).join('') || '<span class="meta">ยังไม่มี</span>';
   $('log').innerHTML = S.log.map(l => `<div class="${l.type}">${esc(l.text)}</div>`).join('') || '<div class="meta">—</div>';
 }
@@ -321,6 +364,18 @@ $('adminForm').onsubmit = (e) => {
 };
 $('oriWord').onchange = () => { S.settings.oriWord = $('oriWord').value.trim(); commit(); };
 $('karaWord').onchange = () => { S.settings.karaWord = $('karaWord').value.trim(); commit(); };
+$('listenMode').onchange = () => { S.settings.listenMode = $('listenMode').value; commit(); };
+$('saveYt').onclick = () => {
+  const k = $('ytKey').value.trim();
+  if (k) store.set(YT_KEY, k); else { try { localStorage.removeItem(YT_KEY); } catch {} }
+  $('ytKey').value = ''; toast(k ? 'บันทึก YouTube API Key แล้ว' : 'ลบ YouTube API Key แล้ว'); render();
+};
+document.addEventListener('contextmenu', (e) => {
+  const l = e.target.closest('button[data-listen]');
+  if (!l) return;
+  e.preventDefault();
+  const it = findSong(l.dataset.id); if (it) copyLink(it.song, l.dataset.listen);
+});
 $('autoOpen').onchange = () => { S.settings.autoOpen = $('autoOpen').value; commit(); };
 $('modsAreAdmins').onchange = () => { S.settings.modsAreAdmins = $('modsAreAdmins').checked; commit(); };
 $('autoAccept').onchange = () => { S.settings.autoAccept = $('autoAccept').checked; commit(); };

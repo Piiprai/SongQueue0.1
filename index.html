@@ -145,7 +145,14 @@
       <label class="row">คำค้นเพิ่ม: คาราโอเกะ <input type="text" id="karaWord" style="width:150px"></label>
       <label class="row">กด "เพลงถัดไป" แล้วเปิดเพลงเลย
         <select id="autoOpen"><option value="">ไม่เปิด</option><option value="ori">ต้นฉบับ</option><option value="kara">คาราโอเกะ</option></select></label>
-      <div class="hint">เพลงจะเปิดในแท็บ YouTube เดียวกันทุกครั้ง ไม่เปิดแท็บใหม่รก</div>
+      <label class="row">กดปุ่มแล้ว
+        <select id="listenMode"><option value="direct">เปิดคลิปเลย</option><option value="search">เปิดหน้าค้นหา</option></select></label>
+      <div class="hint">เปิดในแท็บ YouTube เดียวกันทุกครั้ง · <b>คลิกขวา</b>ที่ปุ่ม (มือถือ: กดค้าง) = คัดลอกลิงก์เพลง</div>
+      <details style="margin-top:8px"><summary>YouTube API Key (ไม่บังคับ)</summary>
+        <div class="hint" id="ytStatus"></div>
+        <div class="hint">สร้างฟรีที่ <a href="https://console.cloud.google.com/apis/library/youtube.googleapis.com" target="_blank" rel="noopener" style="color:var(--cyan)">Google Cloud</a> → เปิดใช้ YouTube Data API v3 → Credentials → Create API key</div>
+        <div style="display:flex;gap:6px;margin-top:6px"><input type="password" id="ytKey" placeholder="วาง Key (เว้นว่าง = ลบ)"><button id="saveYt">บันทึก</button></div>
+      </details>
     </section>
 
     <section>
