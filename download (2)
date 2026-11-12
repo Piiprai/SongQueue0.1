@@ -1,0 +1,4 @@
+node_modules/
+queue-data.json
+*.exe
+.DS_Store
