@@ -15,7 +15,7 @@ const store = {
 
 // ---------- ข้อมูล ----------
 let S = {
-  settings: { username: '', keywords: ['ขอเพลง', '!song', '!ขอ'], maxPerUser: 2, blockDuplicate: true, autoAccept: true },
+  settings: { username: '', keywords: ['ขอเพลง', '!song', '!ขอ'], maxPerUser: 2, blockDuplicate: true, autoAccept: true, admins: [], modsAreAdmins: true, oriWord: '', karaWord: 'คาราโอเกะ karaoke', autoOpen: '' },
   nowPlaying: null, queue: [], history: [], log: [],
 };
 try {
@@ -57,7 +57,51 @@ function extractSong(comment) {
   return null;
 }
 
-function handleChat(uniqueId, nickname, comment) {
+// ---------- คำสั่งแอดมินในแชท ----------
+const COMMANDS = [
+  { names: ['!ถัดไป', '!next', '!ข้าม', '!skip'], run: () => { actions.next(); return S.nowPlaying ? `เล่น "${S.nowPlaying.song}"` : 'คิวหมดแล้ว'; } },
+  { names: ['!จบ', '!done'], run: () => { actions.finishCurrent(); return 'จบเพลงปัจจุบัน'; } },
+  { names: ['!ลบ', '!del', '!remove'], needNum: true, run: (q) => { actions.remove(q.id); return `ลบ "${q.song}"`; } },
+  { names: ['!ขึ้น', '!top', '!ดัน'], needNum: true, run: (q) => { actions.move(q.id, 'top'); return `ดัน "${q.song}" ขึ้นบนสุด`; } },
+  { names: ['!เล่น', '!play'], needNum: true, run: (q) => { actions.play(q.id); return `เล่น "${q.song}"`; } },
+  { names: ['!อนุมัติ', '!ok', '!approve'], needNum: true, run: (q) => { actions.approve(q.id); return `อนุมัติ "${q.song}"`; } },
+  { names: ['!เพิ่ม', '!add'], needText: true, run: (text, by) => { const r = addRequest(text, 'admin:' + by, by + ' (แอดมิน)', 'manual'); return r.ok ? null : r.reason; } },
+  { names: ['!ล้างคิว', '!clear'], run: () => { S.queue = []; return 'ล้างคิว'; } },
+];
+
+function isAdmin(uniqueId, isMod) {
+  const id = String(uniqueId || '').replace(/^@/, '').toLowerCase();
+  if (id && id === S.settings.username.toLowerCase()) return true;
+  if (isMod && S.settings.modsAreAdmins) return true;
+  return S.settings.admins.some(a => a.replace(/^@/, '').toLowerCase() === id);
+}
+
+function tryCommand(uniqueId, nickname, comment, isMod) {
+  const text = comment.trim();
+  if (!text.startsWith('!')) return null;
+  const word = text.split(/\s+/)[0].toLowerCase();
+  const cmd = COMMANDS.find(c => c.names.includes(word));
+  if (!cmd) return null;
+  if (!isAdmin(uniqueId, isMod)) return null; // คนดูทั่วไปพิมพ์คำสั่ง = ไม่ทำอะไร
+  const arg = text.slice(word.length).trim();
+  let msg;
+  if (cmd.needNum) {
+    const n = parseInt(arg.replace(/^#/, ''));
+    const q = S.queue[n - 1];
+    if (!q) { addLog(`⚠️ ${nickname}: ไม่มีคิวลำดับที่ ${arg || '?'}`, 'warn'); commit(); return { ok: false, reason: 'ไม่มีลำดับนี้' }; }
+    msg = cmd.run(q);
+  } else if (cmd.needText) {
+    if (!arg) return { ok: false, reason: 'ใส่ชื่อเพลงด้วย' };
+    msg = cmd.run(arg, nickname);
+  } else msg = cmd.run();
+  if (msg) addLog(`🛡️ ${nickname}: ${msg}`, 'ok');
+  commit();
+  return { ok: true, admin: true };
+}
+
+function handleChat(uniqueId, nickname, comment, isMod = false) {
+  const cmd = tryCommand(uniqueId, nickname, comment || '', isMod);
+  if (cmd) return cmd;
   const song = extractSong(comment || '');
   if (!song) return { ok: false, reason: 'ไม่ใช่ข้อความขอเพลง' };
   return addRequest(song, uniqueId, nickname, 'chat');
@@ -123,7 +167,9 @@ function openSocket(username, key) {
       const d = m.data || m;
       const u = d.user || m.user || {};
       const comment = d.comment ?? d.content ?? m.comment ?? '';
-      handleChat(u.uniqueId || u.unique_id || u.userId || 'viewer', u.nickname || u.nickName || u.uniqueId || 'คนดู', comment);
+      const ident = d.userIdentity || u.userIdentity || {};
+      const isMod = !!(d.isModerator || u.isModerator || ident.isModeratorOfAnchor || u.isModeratorOfAnchor);
+      handleChat(u.uniqueId || u.unique_id || u.userId || 'viewer', u.nickname || u.nickName || u.uniqueId || 'คนดู', comment, isMod);
     }
   };
   ws.onclose = (ev) => {
@@ -164,6 +210,21 @@ const actions = {
   requeue(id) { const h = S.history.find(x => x.id === id); if (h) addRequest(h.song, h.user, h.nickname, 'manual'); },
 };
 
+// ---------- ปุ่มฟังเพลง (เปิด YouTube) ----------
+function listen(song, mode) {
+  if (!song) return;
+  const extra = mode === 'kara' ? S.settings.karaWord : S.settings.oriWord;
+  const q = `${song} ${extra || ''}`.trim();
+  // ใช้หน้าต่างเดิมซ้ำ ไม่เปิดแท็บใหม่ทุกครั้ง
+  const w = window.open('https://www.youtube.com/results?search_query=' + encodeURIComponent(q), 'songqueue-player');
+  if (!w) toast('เบราว์เซอร์บล็อกป๊อปอัป — กดอนุญาตป๊อปอัปให้เว็บนี้');
+}
+const listenBtns = (id) => `
+  <button class="listen" data-listen="ori" data-id="${id}" title="ฟังต้นฉบับ">▶ ต้นฉบับ</button>
+  <button class="listen kara" data-listen="kara" data-id="${id}" title="เปิดคาราโอเกะ">🎤 คาราโอเกะ</button>`;
+const findSong = (id) => (S.nowPlaying && S.nowPlaying.id === id ? S.nowPlaying : null)
+  || S.queue.find(x => x.id === id) || S.history.find(x => x.id === id);
+
 // ---------- แสดงผล ----------
 function render() {
   $('dot').className = 'dot ' + live.status;
@@ -171,7 +232,8 @@ function render() {
   $('connectBtn').textContent = live.status === 'offline' ? 'เชื่อมต่อ' : 'ยกเลิก';
 
   $('now').innerHTML = S.nowPlaying
-    ? `<div class="song">${esc(S.nowPlaying.song)}</div><div class="by">ขอโดย ${esc(S.nowPlaying.nickname)}</div>`
+    ? `<div class="song">${esc(S.nowPlaying.song)}</div><div class="by">ขอโดย ${esc(S.nowPlaying.nickname)}</div>
+       <div class="listen-row">${listenBtns(S.nowPlaying.id)}</div>`
     : `<div class="song" style="color:var(--muted)">— ยังไม่มีเพลง —</div><div class="by">กด "เพลงถัดไป" เพื่อเริ่มคิว</div>`;
 
   $('qCount').textContent = S.queue.length;
@@ -181,8 +243,9 @@ function render() {
       <div><div class="song-name">${esc(q.song)} ${q.status === 'pending' ? '<span class="tag">รออนุมัติ</span>' : ''}</div>
         <div class="meta">${esc(q.nickname)} · ${ago(q.time)}</div></div>
       <div class="acts">
+        ${listenBtns(q.id)}
         ${q.status === 'pending' ? `<button data-a="approve" data-id="${q.id}" title="อนุมัติ">✔</button>` : ''}
-        <button data-a="play" data-id="${q.id}" title="เล่นเลย">▶</button>
+        <button data-a="play" data-id="${q.id}" title="ย้ายไปกำลังเล่น">⏭</button>
         <button data-a="top" data-id="${q.id}" title="ขึ้นบนสุด">⤒</button>
         <button data-a="up" data-id="${q.id}" title="ขึ้น">↑</button>
         <button data-a="down" data-id="${q.id}" title="ลง">↓</button>
@@ -194,12 +257,17 @@ function render() {
   $('history').innerHTML = S.history.slice(0, 50).map(h => `
     <li class="item"><div class="num">✓</div>
       <div><div class="song-name">${esc(h.song)}</div><div class="meta">${esc(h.nickname)}</div></div>
-      <div class="acts"><button data-a="requeue" data-id="${h.id}" title="ใส่คิวอีกครั้ง">↺</button></div></li>`).join('');
+      <div class="acts">${listenBtns(h.id)}<button data-a="requeue" data-id="${h.id}" title="ใส่คิวอีกครั้ง">↺</button></div></li>`).join('');
 
   $('chips').innerHTML = S.settings.keywords.map((k, i) => `<span class="chip">${esc(k)}<button data-kw="${i}" title="ลบ">×</button></span>`).join('');
   if (document.activeElement !== $('maxPerUser')) $('maxPerUser').value = S.settings.maxPerUser;
   $('blockDuplicate').checked = S.settings.blockDuplicate;
   $('autoAccept').checked = S.settings.autoAccept;
+  $('modsAreAdmins').checked = S.settings.modsAreAdmins;
+  if (document.activeElement !== $('oriWord')) $('oriWord').value = S.settings.oriWord;
+  if (document.activeElement !== $('karaWord')) $('karaWord').value = S.settings.karaWord;
+  $('autoOpen').value = S.settings.autoOpen;
+  $('adminChips').innerHTML = S.settings.admins.map((a, i) => `<span class="chip">@${esc(a)}<button data-admin="${i}" title="ลบ">×</button></span>`).join('') || '<span class="meta">ยังไม่มี</span>';
   $('log').innerHTML = S.log.map(l => `<div class="${l.type}">${esc(l.text)}</div>`).join('') || '<div class="meta">—</div>';
 }
 
@@ -213,7 +281,10 @@ $('saveKey').onclick = () => {
 $('changeKey').onclick = () => { $('setup').style.display = ''; $('apiKey').focus(); };
 $('connectBtn').onclick = () => live.status === 'offline' ? connectLive() : disconnectLive();
 $('username').onkeydown = (e) => { if (e.key === 'Enter') $('connectBtn').click(); };
-$('nextBtn').onclick = () => { actions.next(); commit(); };
+$('nextBtn').onclick = () => {
+  actions.next(); commit();
+  if (S.nowPlaying && S.settings.autoOpen) listen(S.nowPlaying.song, S.settings.autoOpen);
+};
 $('finishBtn').onclick = () => { actions.finishCurrent(); commit(); };
 $('clearBtn').onclick = () => { if (confirm('ล้างคิวทั้งหมด?')) { S.queue = []; addLog('🧹 ล้างคิวแล้ว'); commit(); } };
 $('addForm').onsubmit = (e) => {
@@ -224,10 +295,12 @@ $('addForm').onsubmit = (e) => {
 $('testForm').onsubmit = (e) => {
   e.preventDefault();
   const name = $('testUser').value || 'ทดสอบ';
-  const r = handleChat(name, name, $('testMsg').value);
-  toast(r.ok ? 'เข้าคิวแล้ว' : r.reason);
+  const r = handleChat(name, name, $('testMsg').value, $('testMod').checked);
+  toast(r.ok ? (r.admin ? 'ทำคำสั่งแล้ว' : 'เข้าคิวแล้ว') : r.reason);
 };
 document.addEventListener('click', (e) => {
+  const l = e.target.closest('button[data-listen]');
+  if (l) { const it = findSong(l.dataset.id); return it && listen(it.song, l.dataset.listen); }
   const b = e.target.closest('button[data-a]');
   if (b) {
     const { a, id } = b.dataset;
@@ -235,11 +308,21 @@ document.addEventListener('click', (e) => {
     return commit();
   }
   const k = e.target.closest('button[data-kw]');
+  const ad = e.target.closest('button[data-admin]');
+  if (ad) { S.settings.admins = S.settings.admins.filter((_, i) => i != ad.dataset.admin); return commit(); }
   if (k) { S.settings.keywords = S.settings.keywords.filter((_, i) => i != k.dataset.kw); commit(); }
 });
 $('kwForm').onsubmit = (e) => { e.preventDefault(); const v = $('kwInput').value.trim(); if (v) S.settings.keywords.push(v); $('kwInput').value = ''; commit(); };
 $('maxPerUser').onchange = () => { S.settings.maxPerUser = Math.max(0, parseInt($('maxPerUser').value) || 0); commit(); };
 $('blockDuplicate').onchange = () => { S.settings.blockDuplicate = $('blockDuplicate').checked; commit(); };
+$('adminForm').onsubmit = (e) => {
+  e.preventDefault(); const v = $('adminInput').value.replace(/^@/, '').trim();
+  if (v && !S.settings.admins.includes(v)) S.settings.admins.push(v); $('adminInput').value = ''; commit();
+};
+$('oriWord').onchange = () => { S.settings.oriWord = $('oriWord').value.trim(); commit(); };
+$('karaWord').onchange = () => { S.settings.karaWord = $('karaWord').value.trim(); commit(); };
+$('autoOpen').onchange = () => { S.settings.autoOpen = $('autoOpen').value; commit(); };
+$('modsAreAdmins').onchange = () => { S.settings.modsAreAdmins = $('modsAreAdmins').checked; commit(); };
 $('autoAccept').onchange = () => { S.settings.autoAccept = $('autoAccept').checked; commit(); };
 $('openOverlay').onclick = () => window.open('overlay.html', 'overlay-songqueue', 'width=500,height=560');
 

@@ -72,6 +72,12 @@
   .setup a { color: var(--cyan); }
   .setup .row2 { display: flex; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
   .setup .row2 input { flex: 1; min-width: 220px; }
+  .listen { background: #2a1520; border-color: #5a2236; }
+  .listen.kara { background: #10282a; border-color: #1f5558; }
+  .listen-row { display: flex; gap: 8px; margin-top: 10px; }
+  .listen-row .listen { font-size: 15px; padding: 8px 14px; }
+  li.item .acts { flex-wrap: wrap; justify-content: flex-end; }
+  select { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 8px; padding: 6px; font: inherit; }
 </style>
 </head>
 <body>
@@ -134,10 +140,40 @@
     </section>
 
     <section>
+      <h2>🎧 ปุ่มฟังเพลง (YouTube)</h2>
+      <label class="row">คำค้นเพิ่ม: ต้นฉบับ <input type="text" id="oriWord" placeholder="เช่น official" style="width:150px"></label>
+      <label class="row">คำค้นเพิ่ม: คาราโอเกะ <input type="text" id="karaWord" style="width:150px"></label>
+      <label class="row">กด "เพลงถัดไป" แล้วเปิดเพลงเลย
+        <select id="autoOpen"><option value="">ไม่เปิด</option><option value="ori">ต้นฉบับ</option><option value="kara">คาราโอเกะ</option></select></label>
+      <div class="hint">เพลงจะเปิดในแท็บ YouTube เดียวกันทุกครั้ง ไม่เปิดแท็บใหม่รก</div>
+    </section>
+
+    <section>
+      <h2>🛡️ แอดมิน</h2>
+      <div class="meta">แอดมินพิมพ์คำสั่งในแชทไลฟ์เพื่อจัดคิวได้</div>
+      <div class="chips" id="adminChips" style="margin-top:8px"></div>
+      <form id="adminForm" style="display:flex;gap:6px"><input type="text" id="adminInput" placeholder="@ชื่อผู้ใช้แอดมิน"><button>เพิ่ม</button></form>
+      <label class="row">นับผู้ดูแลไลฟ์ (Moderator) เป็นแอดมินอัตโนมัติ <input type="checkbox" id="modsAreAdmins"></label>
+      <details><summary>คำสั่งที่ใช้ได้</summary>
+        <div class="hint" style="line-height:1.8">
+          <b>!ถัดไป</b> / !next — เล่นเพลงถัดไป<br>
+          <b>!จบ</b> / !done — จบเพลงที่เล่นอยู่<br>
+          <b>!ลบ 3</b> / !del 3 — ลบคิวลำดับที่ 3<br>
+          <b>!ขึ้น 3</b> / !top 3 — ดันลำดับที่ 3 ขึ้นบนสุด<br>
+          <b>!เล่น 3</b> / !play 3 — เล่นลำดับที่ 3 เลย<br>
+          <b>!อนุมัติ 3</b> / !ok 3 — อนุมัติเพลงที่รออยู่<br>
+          <b>!เพิ่ม ชื่อเพลง</b> / !add — เพิ่มเพลง (ไม่นับโควตา)<br>
+          <b>!ล้างคิว</b> / !clear — ล้างคิวทั้งหมด<br>
+          เจ้าของไลฟ์ใช้คำสั่งได้เสมอ
+        </div></details>
+    </section>
+
+    <section>
       <h2>🧪 ทดสอบ (ไม่ต้องไลฟ์)</h2>
       <form id="testForm" style="display:flex;flex-direction:column;gap:6px">
         <input type="text" id="testUser" placeholder="ชื่อคนดู" value="แฟนคลับ1">
         <input type="text" id="testMsg" placeholder="ข้อความแชท" value="ขอเพลง ลมหนาว">
+        <label class="row" style="margin:0">ส่งในฐานะแอดมิน <input type="checkbox" id="testMod"></label>
         <button>ส่งข้อความทดสอบ</button>
       </form>
     </section>
